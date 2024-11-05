@@ -1,16 +1,20 @@
-from flask import Flask, render_template, Response, request
+from flask import Flask, render_template, Response, request,jsonify
 import cv2
 import numpy as np
 import time
 from ultralytics import YOLO
 import os
+import logging
+logging.getLogger('ultralytics').setLevel(logging.ERROR)
 video_path = '/home/thinh/Downloads/input.mp4'
 app = Flask(__name__)
 model = YOLO("/home/thinh/project_test/esp32_cam_fire/yolov10-firedetection/fire.pt")
 # Khởi động camera
 # camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
 camera = cv2.VideoCapture(video_path)
+fire_detected=False
 def generate_frames():
+    global fire_detected
     while True:
         # Đọc frame từ camera
         success, img = camera.read()
@@ -29,7 +33,10 @@ def generate_frames():
                     c = box.cls
                     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
                     label = model.names[int(c)]
-                    
+                    # print(label)
+                    if label == 'Fire':
+                        fire_detected = True
+                        # print("firer")
                     # Vẽ khung và nhãn
                     cv2.rectangle(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
                     cv2.putText(
@@ -71,6 +78,10 @@ def control():
     print(f"Received command: {direction}")
     # Thực hiện hành động cho lệnh nhận được ở đây
     return "Command received", 200
-
+@app.route('/fire_status', methods=['GET'])
+def fire_status():
+    """Gửi trạng thái phát hiện lửa"""
+    # print(fire_detected)
+    return jsonify({'fire_detected': fire_detected})
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

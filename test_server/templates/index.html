@@ -3,27 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <title>Live Camera Feed and Controls</title>
+    <style>
+        /* Dark theme styles */
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            position: relative; /* Thêm để dễ dàng định vị các phần tử */
+            height: 100vh; /* Đặt chiều cao toàn bộ trang */
+            overflow: hidden; /* Ẩn các thanh cuộn */
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 20px;
+        }
+        
+        #video-container {
+            display: flex;
+            justify-content: center;
+
+        }
+
+        /* Warning message styling */
+        #warning {
+            display: none; /* Ẩn thông báo theo mặc định */
+            color: red;
+            font-size: 32px; /* Tăng kích thước chữ */
+            font-weight: bold;
+            position: absolute;
+            top: 20px; /* Vị trí từ trên xuống */
+            right: 20px; /* Di chuyển sang bên phải */
+        }
+
+        /* Joystick container styling */
+        #joystick-container {
+            width: 200px;      /* Độ rộng joystick */
+            height: 200px;     /* Chiều cao joystick */
+            margin-bottom: 20px; /* Khoảng cách dưới */
+            position: absolute; /* Đặt vị trí tuyệt đối */
+            bottom: 20px; /* Cách dưới 20px */
+            left: 50%; /* Căn giữa */
+            transform: translateX(-50%); /* Căn giữa theo chiều ngang */
+        }
+
+        /* NippleJS joystick styles */
+        .nipple {
+            width: 100px;      /* Kích thước joystick */
+            height: 100px;     /* Kích thước joystick */
+        }
+    </style>
 </head>
 <body>
     <h1>Live Camera Feed</h1>
-    <div>
+
+    <!-- Centered video container -->
+    <div id="video-container">
         <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed" width="640">
     </div>
-    <h2>Controls</h2>
-    <div>
-        <button onclick="sendCommand('up')">Up</button>
-        <button onclick="sendCommand('down')">Down</button>
-        <button onclick="sendCommand('left')">Left</button>
-        <button onclick="sendCommand('right')">Right</button>
-    </div>
+
+    <!-- Warning message -->
+    <div id="warning">Cảnh báo: Có lửa được phát hiện!</div>
+
+    <!-- Joystick container -->
+    <div id="joystick-container"></div>
+
+    <!-- NippleJS library for the joystick -->
+    <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.8.3/dist/nipplejs.min.js"></script>
     <script>
+        let lastDirection = null; // Biến để lưu hướng đã gửi
+        const threshold = 15; // Ngưỡng di chuyển để phát hiện
+
+        // Hàm để gửi lệnh joystick đến server
         function sendCommand(direction) {
-            fetch('/control', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({direction: direction})
+            if (direction !== lastDirection) { // Kiểm tra nếu hướng đã thay đổi
+                fetch('/control', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({direction: direction})
+                }).then(response => {
+                    if (!response.ok) {
+                        document.getElementById('warning').style.display = 'block';
+                    } else {
+                        document.getElementById('warning').style.display = 'none';
+                    }
+                }).catch(() => {
+                    document.getElementById('warning').style.display = 'block';
+                });
+
+                lastDirection = direction; // Cập nhật hướng đã gửi
+            }
+        }
+
+        // Hàm để hiển thị cảnh báo khi phát hiện có lửa
+        function showWarning() {
+            document.getElementById('warning').style.display = 'block';
+        }
+
+        function hideWarning() {
+            document.getElementById('warning').style.display = 'none';
+        }
+
+        // Khởi tạo NippleJS cho joystick
+        const joystickManager = nipplejs.create({
+            zone: document.getElementById('joystick-container'),
+            mode: 'static',
+            position: { left: '50%', top: '50%' },
+            color: 'blue'
+        });
+
+        // Lập bản đồ chuyển động joystick tới các hướng
+        joystickManager.on('move', (evt, data) => {
+            const angle = data.angle.degree;
+            let direction;
+
+            if (data.distance > threshold) { // Kiểm tra xem joystick có di chuyển vượt quá ngưỡng không
+                if (angle >= 45 && angle < 135) {
+                    direction = 'up';
+                } else if (angle >= 135 && angle < 225) {
+                    direction = 'left';
+                } else if (angle >= 225 && angle < 315) {
+                    direction = 'down';
+                } else {
+                    direction = 'right';
+                }
+
+                sendCommand(direction);
+            }
+        });
+
+        // Ngừng lệnh khi joystick được thả ra
+        joystickManager.on('end', () => {
+            sendCommand('stop');
+            lastDirection = null; // Đặt lại hướng đã gửi khi thả ra
+        });
+
+        // Hàm kiểm tra kết quả phát hiện lửa và hiển thị cảnh báo
+        function detectFire(fireDetected) {
+            if (fireDetected) {
+                showWarning(); // Hiện cảnh báo nếu phát hiện lửa
+            } else {
+                hideWarning(); // Ẩn cảnh báo nếu không phát hiện lửa
+            }
+        }
+        function checkFireStatus() {
+        fetch('/fire_status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.fire_detected) {
+                    showWarning(); // Hiện cảnh báo nếu phát hiện lửa
+                } else {
+                    hideWarning(); // Ẩn cảnh báo nếu không phát hiện lửa
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching fire status:', error);
             });
         }
+
+    // Gọi hàm checkFireStatus mỗi giây
+        setInterval(checkFireStatus, 1000); // 1000 ms = 1 giây
+
+        // Bạn có thể gọi hàm `detectFire(true)` hoặc `detectFire(false)` để kiểm tra việc phát hiện lửa
     </script>
 </body>
 </html>
