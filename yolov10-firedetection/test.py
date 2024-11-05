@@ -3,14 +3,17 @@ import numpy as np
 import time
 from ultralytics import YOLO
 import os
+video_path = '/home/thinh/Downloads/input.mp4'
+
+# Create a video capture object
 
 # Mô hình yolov10 phát hiện lửa
-model = YOLO(f"{os.getcwd()}/fire.pt")
+model = YOLO("/home/thinh/project_test/esp32_cam_fire/yolov10-firedetection/fire.pt")
 
 # Đọc và hiển thị hình ảnh từ webcam
 def stream_video():
     # Mở luồng webcam
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
         print("Không thể mở webcam")
