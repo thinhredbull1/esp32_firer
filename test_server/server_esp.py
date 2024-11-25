@@ -5,20 +5,32 @@ import time
 from ultralytics import YOLO
 import os
 import logging
+import base64
+from flask_socketio import SocketIO, emit
+from threading import Thread
 logging.getLogger('ultralytics').setLevel(logging.ERROR)
-video_path = '/home/thinh/Downloads/FID_01_Y_AXIS_Trimo.mp4'
+video_path = '/home/thinh/Downloads/input.mp4'
 app = Flask(__name__)
 model = YOLO("/home/thinh/project_test/esp32_cam_fire/yolov10-firedetection/fire.pt")
 # Khởi động camera
-# camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
-camera = cv2.VideoCapture(video_path)
+
+
 fire_detected=False
 def generate_frames():
     global fire_detected
+    # global camera
+    camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
+# camera = cv2.VideoCapture(video_path)
+    if not camera.isOpened():
+        print("Error: Camera not found!")
+    else:
+        print("Camera opened successfully.")
+        camera.release()
     while True:
         # Đọc frame từ camera
         success, img = camera.read()
         if not success:
+            print("NOT camera")
             break
         else:
             # Mã hóa frame thành JPEG
@@ -70,18 +82,44 @@ def index():
 def video_feed():
     """Stream video đến trang web"""
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
 @app.route('/control', methods=['POST'])
 def control():
     """Nhận lệnh điều khiển từ các nút"""
-    direction = request.json.get('direction')
+    global fire_detected
+    direction = request.json.get('direction', 'Unknown')
+    if direction=='stop':
+        fire_detected=True
+    else:
+        fire_detected=False
     print(f"Received command: {direction}")
-    # Thực hiện hành động cho lệnh nhận được ở đây
     return "Command received", 200
 @app.route('/fire_status', methods=['GET'])
 def fire_status():
     """Gửi trạng thái phát hiện lửa"""
     # print(fire_detected)
     return jsonify({'fire_detected': fire_detected})
+socketio = SocketIO(app, cors_allowed_origins="*",threaded=True)  # Bật CORS toàn cầu
+@socketio.on('connect')
+def handle_connect():
+    print("User connected!")
+    emit('event', {'message': 'Connected !!!!'})
+
+
+@socketio.on('status')
+def handle_status(data):
+    print(f"Status received from client: {data}")
+@socketio.on('image_frame')
+def handle_image_frame(data):
+    print(f"Status received from client: {data}")
+    image_data = data.get('image_frame')
+    if image_data:
+        image_bytes = base64.b64decode(image_data)
+        # print("Image successfully saved as 'received_image.jpg'")
+        print(f"Received base64 image data: {image_bytes}")
+    else:
+        print("No image data found")
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    socketio.run(app, host='0.0.0.0', port=5000,debug=True)
+
+

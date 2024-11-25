@@ -6,12 +6,12 @@ from ultralytics import YOLO
 import os
 import logging
 logging.getLogger('ultralytics').setLevel(logging.ERROR)
-video_path = '/home/thinh/Downloads/FID_01_Y_AXIS_Trimo.mp4'
+video_path = '/home/thinh/Downloads/input.mp4'
 app = Flask(__name__)
 model = YOLO("/home/thinh/project_test/esp32_cam_fire/yolov10-firedetection/fire.pt")
 # Khởi động camera
-# camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
-camera = cv2.VideoCapture(video_path)
+camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
+# camera = cv2.VideoCapture(video_path)
 fire_detected=False
 def generate_frames():
     global fire_detected
