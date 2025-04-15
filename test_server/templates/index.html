@@ -29,16 +29,19 @@
         }
         #control-buttons {
             display: flex;
-            justify-content: center;
-            gap: 10px; /* Khoảng cách giữa các nút */
-            margin-top: 20px;
+            flex-direction: column; /* Sắp xếp các nút theo chiều dọc */
+            gap: 15px; /* Khoảng cách giữa các nút */
+            position: absolute;
+            bottom: 20px; /* Cách mép dưới 20px */
+            right: 20px; /* Cách mép phải 20px */
         }
 
         #control-buttons button {
             padding: 10px 20px;
             font-size: 1em;
             border: none;
-            border-radius: 5px;
+            gap: 10px;
+            border-radius: 10px;
             background-color: #007bff;
             color: white;
             cursor: pointer;
@@ -66,44 +69,43 @@
             margin-bottom: 20px; /* Khoảng cách dưới */
             position: absolute; /* Đặt vị trí tuyệt đối */
             bottom: 20px; /* Cách dưới 20px */
-            left: 50%; /* Căn giữa */
-            transform: translateX(-50%); /* Căn giữa theo chiều ngang */
+            left: 20px; /* Căn giữa */
         }
 
         /* NippleJS joystick styles */
-        .nipple {
-            width: 100px;      /* Kích thước joystick */
-            height: 100px;     /* Kích thước joystick */
-        }
     </style>
 </head>
 <body>
     <h1>Live Camera Feed</h1>
 
     <!-- Centered video container -->
+    <div id="speed-display" style="margin-bottom: 20px;">
+        <p>Speed Linear: <span id="speed-linear">0.0</span> m/s</p>
+        <p>Speed Angular: <span id="speed-angular">0.0</span> rad/s</p>
+    </div>
     <div id="video-container">
         <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed" width="640">
     </div>
-    <div id="control-buttons">
-        <button onclick="sendManualCommand('BOM')">BOM</button>
-        <button onclick="sendManualCommand('s1')">SERVO LEFT</button>
-        <button onclick="sendManualCommand('s2')">SERVO RIGHT</button>
-    </div>
+ 
     <!-- Warning message -->
     <div id="warning">Cảnh báo: Có lửa được phát hiện!</div>
 
     <!-- Joystick container -->
     <div id="joystick-container"></div>
-
+    <div id="control-buttons">
+        <button onclick="sendManualCommand('0p')">BOM</button>
+        <button onclick="sendManualCommand('1s')">SERVO LEFT</button>
+        <button onclick="sendManualCommand('2s')">SERVO RIGHT</button>
+    </div>
     <!-- NippleJS library for the joystick -->
     <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.8.3/dist/nipplejs.min.js"></script>
     <script>
         let lastDirection = null; // Biến để lưu hướng đã gửi
         const threshold = 15; // Ngưỡng di chuyển để phát hiện
-
+            // json {control:}
         // Hàm để gửi lệnh joystick đến server
         function sendCommand(direction) {
-            if (direction !== lastDirection) { // Kiểm tra nếu hướng đã thay đổi
+       
                 fetch('/control', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
@@ -119,7 +121,7 @@
                 });
 
                 lastDirection = direction; // Cập nhật hướng đã gửi
-            }
+            
         }
         function sendManualCommand(command) {
             fetch('/control2', {
@@ -154,33 +156,54 @@
             zone: document.getElementById('joystick-container'),
             mode: 'static',
             position: { left: '50%', top: '50%' },
-            color: 'blue'
+            color: 'blue',
+            size: 200
+            
         });
+        joystickManager.on('added', (evt, nipple) => {
+    // Chọn phần tử núm (nipple)
+            const nippleElement = nipple.ui.front;
+
+            // Chỉnh kích thước núm
+            nippleElement.style.width = '50px';  // Đặt chiều rộng núm
+            nippleElement.style.height = '50px'; // Đặt chiều cao núm
+
+            // Nếu muốn đổi màu:
+            nippleElement.style.backgroundColor = 'red';
+        });
+    let prevX = 0;
+    let prevY = 0;
+
+// Ngưỡng thay đổi
 
         // Lập bản đồ chuyển động joystick tới các hướng
         joystickManager.on('move', (evt, data) => {
-            const angle = data.angle.degree;
-            let direction;
-
-            if (data.distance > threshold) { // Kiểm tra xem joystick có di chuyển vượt quá ngưỡng không
-                if (angle >= 45 && angle < 135) {
-                    direction = 'up';
-                } else if (angle >= 135 && angle < 225) {
-                    direction = 'left';
-                } else if (angle >= 225 && angle < 315) {
-                    direction = 'down';
-                } else {
-                    direction = 'right';
+            if (data.angle && typeof data.angle.radian !== 'undefined') {
+                // Tính toán vector x và y
+                const x = data.force * Math.cos(data.angle.radian);
+                const y = data.force * Math.sin(data.angle.radian);
+                
+                // Chỉ gửi lệnh nếu x hoặc y thay đổi vượt ngưỡng
+                if (Math.abs(x - prevX) > threshold || Math.abs(y - prevY) > 0.04) {
+                    console.log('Significant movement detected. Sending command:', { x, y });
+                    
+                    // Gửi lệnh
+                    var cmd=String(y+x)+"k"+String(y-x);
+                    sendCommand(cmd);
+                    
+                    // Cập nhật giá trị trước đó
+                    prevX = x;
+                    prevY = y;
                 }
-
-                sendCommand(direction);
+            } else {
+                console.warn('Angle data is missing or undefined:', data);
             }
         });
 
         // Ngừng lệnh khi joystick được thả ra
         joystickManager.on('end', () => {
-            sendCommand('stop');
-            lastDirection = null; // Đặt lại hướng đã gửi khi thả ra
+            sendCommand("0k0"); // Gửi lệnh dừng
+            lastDirection = null; // Đặt lại hướng đã gửi
         });
 
         // Hàm kiểm tra kết quả phát hiện lửa và hiển thị cảnh báo
@@ -205,6 +228,21 @@
                 console.error('Error fetching fire status:', error);
             });
         }
+        function checkSpeedStatus() {
+        fetch('/speed_status')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('speed-linear').textContent = data.speed_linear.toFixed(2);
+                document.getElementById('speed-angular').textContent = data.speed_angular.toFixed(2);
+            })
+            .catch(error => {
+                console.error('Error fetching speed status:', error);
+                    });
+        }
+
+// Gọi hàm checkSpeedStatus mỗi giây
+        setInterval(checkSpeedStatus, 500); // 1000 ms = 1 giây
+
 
     // Gọi hàm checkFireStatus mỗi giây
         setInterval(checkFireStatus, 1000); // 1000 ms = 1 giây

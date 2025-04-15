@@ -8,7 +8,9 @@ import logging
 logging.getLogger('ultralytics').setLevel(logging.ERROR)
 video_path = '/home/thinh/Downloads/input.mp4'
 app = Flask(__name__)
-model = YOLO("/home/thinh/project_test/esp32_cam_fire/yolov10-firedetection/fire.pt")
+model = YOLO("../yolov10-firedetection/fire.pt")
+speed_linear=0
+speed_angular=0
 # Khởi động camera
 camera = cv2.VideoCapture(0)  # 0 là camera mặc định, có thể thay đổi nếu bạn có nhiều camera
 # camera = cv2.VideoCapture(video_path)
@@ -61,27 +63,48 @@ def generate_frames():
             yield (b'--frame\r\n'
                 b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
+
 @app.route('/')
 def index():
-    """Trang chủ hiển thị video và nút điều khiển"""
     return render_template('index.html')
 
 @app.route('/video_feed')
 def video_feed():
-    """Stream video đến trang web"""
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-@app.route('/control', methods=['POST'])
-def control():
+@app.route('/control2', methods=['POST'])
+def control2():
+    # global speed_linear
     """Nhận lệnh điều khiển từ các nút"""
+    # speed_linear=10
     direction = request.json.get('direction')
     print(f"Received command: {direction}")
-    # Thực hiện hành động cho lệnh nhận được ở đây
     return "Command received", 200
+@app.route('/speed_status', methods=['GET'])
+def speed_status():
+    global speed_linear
+    global speed_angular
+    return jsonify({'speed_linear': speed_linear, 'speed_angular': speed_angular})
+@app.route('/control', methods=['POST'])
+def control():
+    direction = request.json.get('direction')
+    # print(f"Received command: {direction}")
+    speed=direction.split("k")
+    speed_left=int(float(speed[0])*100)
+    speed_right=int(float(speed[1])*100)
+    speed_left=max(min(speed_left,200),-200)
+    speed_right=max(min(speed_right,200),-200)
+
+    cmd_send=f"{speed_left}k{speed_right}"
+    print(f"left:{speed_left}  right:{speed_right}")
+
+    return "Command received", 200
+
+
 @app.route('/fire_status', methods=['GET'])
 def fire_status():
-    """Gửi trạng thái phát hiện lửa"""
-    # print(fire_detected)
+    global fire_detected
+    if(fire_detected):
+        cmd="1p"
     return jsonify({'fire_detected': fire_detected})
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

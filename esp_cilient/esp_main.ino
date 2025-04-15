@@ -3,14 +3,14 @@
 #include <WebSocketsClient.h>
 #include <ESP32_Servo.h>
 WebSocketsClient webSocket;
-
+#define use_serial 1
 // WiFi credentials
-const char* ssid = "hhl";
-const char* password = "00000000";
+const char *ssid = "hhl";
+const char *password = "00000000";
 
 #define MAX_LENGTH 50
 #define RAD_TO_DEG 57.2957786
-
+int timeSample = 500;
 unsigned long time_d = 0;
 bool start_camera = 0;
 #define PWDN_GPIO_NUM 32
@@ -29,7 +29,7 @@ bool start_camera = 0;
 #define VSYNC_GPIO_NUM 25
 #define HREF_GPIO_NUM 23
 #define PCLK_GPIO_NUM 22
-camera_fb_t* fb = NULL;
+camera_fb_t *fb = NULL;
 int speed_desired;
 float speed_increase;
 bool run_ = 0;
@@ -47,227 +47,361 @@ unsigned long time_stop;
 #define IN4 4
 #define BOM 4
 #define BUZZ 2
-#define mor_left 1
-#define mor_right 0
+#define mor_left 0
+#define mor_right 1
 #define STOP 0
 #define DOWN 3
 #define UP 1
 #define LEFT 2
 #define RIGHT 4
-int pwm[2] = { 14, 13 };
-int dir[2] = { 15, 12 };
+#define PI 3.14159265
+const double WHEEL_DIAMTER = 5.2;
+const double ENCODER_PULSE = 40;
+const double cm_per_count = PI * WHEEL_DIAMTER / ENCODER_PULSE;
+const double robot_with = 15;
+double speed_linear = 0;
+double speed_angular = 0;
+int pwm[2] = {14, 13};
+int dir[2] = {15, 12};
+const int enc[] = {4, 2};
+const int servo_pin = 1;
+const int fire_sensor = 3;
+bool fireSensorSignal = false;
+int encoder_count[2] = {0, 0};
+int speed_sign[2] = {0, 0};
 Servo sv;
 volatile bool connected = 0;
 volatile bool fire_now = 0;
 int angle_servo = 90;
 int speed = 120;
-void control_motor(int motor, int speed) {
-  bool direct = speed > 0 ? 0 : 1;
-  // digitalWrite(dir[motor],direct);
-  // if(motor)
-  if (direct) {
-    analogWrite(pwm[motor], 255 - abs(speed));
-    digitalWrite(dir[motor], 1);
-  } else {
-    analogWrite(pwm[motor], abs(speed));
-    digitalWrite(dir[motor], 0);
-  }
+bool PinStateChanged(int pin, int *lastButtonState, int *buttonRisingEdge)
+{
+
+    int buttonState = pin;
+
+    if (buttonState != *lastButtonState)
+    {
+        if (buttonState == LOW)
+        {
+            *buttonRisingEdge = 0;
+        }
+        else
+        {
+            *buttonRisingEdge = 1;
+        }
+        *lastButtonState = buttonState;
+        return true;
+    }
+
+    return false;
 }
-void moveRobot(int mode) {
-  switch (mode) {
+void control_motor(int motor, int speed)
+{
+    bool direct = speed > 0 ? 0 : 1;
+    // digitalWrite(dir[motor],direct);
+    // if(motor)
+    if (speed == 0)
+    {
+        analogWrite(pwm[motor], 0);
+        digitalWrite(dir[motor], 0);
+        // speed_sign[motor]=0;
+        return;
+    }
+    if (direct)
+    {
+        speed_sign[motor] = -1;
+        analogWrite(pwm[motor], 255 - abs(speed));
+        digitalWrite(dir[motor], 1);
+    }
+    else
+    {
+        speed_sign[motor] = 1;
+        analogWrite(pwm[motor], abs(speed));
+        digitalWrite(dir[motor], 0);
+    }
+}
+void moveRobot(int mode)
+{
+    switch (mode)
+    {
     case STOP:
-      control_motor(0, 0);
-      control_motor(1, 0);
-      break;
+        control_motor(0, 0);
+        control_motor(1, 0);
+        break;
     case UP:
-      control_motor(mor_left, speed);
-      control_motor(mor_right, speed);
-      break;
+        control_motor(mor_left, speed);
+        control_motor(mor_right, speed);
+        break;
     case LEFT:
-      control_motor(mor_left, -speed);
-      control_motor(mor_right, speed);
-      break;
+        control_motor(mor_left, -speed);
+        control_motor(mor_right, speed);
+        break;
     case RIGHT:
-      control_motor(mor_left, speed);
-      control_motor(mor_right, -speed);
-      break;
+        control_motor(mor_left, speed);
+        control_motor(mor_right, -speed);
+        break;
     case DOWN:
-      control_motor(mor_left, -speed);
-      control_motor(mor_right, -speed);
-      break;
-  }
-}
-void initGPIO() {
-  sv.attach(1, 500, 2400);
-  sv.write(angle_servo);
-  // pinMode(BOM, OUTPUT);
-  // digitalWrite(BOM, LOW);
-  ledcSetup(2, 1000, 8);
-  ledcAttachPin(BOM, 2);
-  pinMode(BUZZ, OUTPUT);
-  digitalWrite(BUZZ, 0);
-  for (int i = 0; i < 2; i++) {
-    pinMode(pwm[i], OUTPUT);
-    pinMode(dir[i], OUTPUT);
-    digitalWrite(pwm[i], LOW);
-    digitalWrite(dir[i], LOW);
-  }
-}
-void onOffBuzz() {
-  static unsigned long time_ = millis();
-  static bool onFire = 0;
-  if (fire_now == 1 && onFire == 0) {
-    digitalWrite(BUZZ, 1);
-    onFire = 1;
-    time_ = millis();
-  }
-  if (onFire) {
-    if (millis() - time_ > 2000) {
-      onFire = 0;
-      fire_now = 0;  
-      digitalWrite(BUZZ, 0);
+        control_motor(mor_left, -speed);
+        control_motor(mor_right, -speed);
+        break;
     }
-  }
 }
-void onOffBOM(bool on) {
-  if (on) ledcWrite(2, 110);
-  else ledcWrite(2, 0);
+void initGPIO()
+{
+    if (!use_serial)
+    {
+        sv.attach(servo_pin, 500, 2400);
+        sv.write(angle_servo);
+        pinMode(enc[mor_right], INPUT_PULLUP);
+    }
+    pinMode(enc[mor_left], INPUT_PULLUP);
+    // pinMode(BOM, OUTPUT);
+    // digitalWrite(BOM, LOW);
+    ledcSetup(2, 1000, 8);
+    ledcAttachPin(BOM, 2);
+
+    // pinMode(BUZZ, OUTPUT);
+    // digitalWrite(BUZZ, 0);
+    for (int i = 0; i < 2; i++)
+    {
+
+        pinMode(pwm[i], OUTPUT);
+        pinMode(dir[i], OUTPUT);
+        digitalWrite(pwm[i], LOW);
+        digitalWrite(dir[i], LOW);
+    }
 }
-void setup() {
-  // Serial.begin(115200);
-   initGPIO();
-  camera_config_t config;
-  config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
-  config.pin_sscb_sda = SIOD_GPIO_NUM;
-  config.pin_sscb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 20000000;
-  config.pixel_format = PIXFORMAT_JPEG;
-  //init with high specs to pre-allocate larger buffers
-  if (psramFound()) {
-    config.frame_size = FRAMESIZE_UXGA;
-    config.jpeg_quality = 10;
-    config.fb_count = 2;
-  } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
-    config.fb_count = 1;
-  }
+void getEncoder()
+{
+    bool enca_now = digitalRead(enc[mor_left]);
 
-  // camera init
-  esp_err_t err = esp_camera_init(&config);
-  if (err != ESP_OK) {
-    // Serial.printf("Camera init failed with error 0x%x", err);
-    return;
-  }
+    static int buttonRisingEdgeA = 0;
+    static int lastButtonStateA = 0;
 
-  sensor_t* s = esp_camera_sensor_get();
-  s->set_framesize(s, FRAMESIZE_SVGA);
- 
-  // sv.write(180);
-  // delay(500);
-  sv.write(angle_servo);
-  WiFi.mode(WIFI_STA); 
-  WiFi.begin(ssid, password);
-  // Serial.println("");
+    static unsigned long time_ = millis();
+    if (PinStateChanged(enca_now, &lastButtonStateA, &buttonRisingEdgeA))
+    {
 
+        // 0 == falling, 1 == Rising
+        encoder_count[mor_left] += speed_sign[mor_left];
+    }
+    if (!use_serial)
+    {
+        bool enb_now = digitalRead(enc[mor_right]);
+        static int buttonRisingEdgeB = 0;
+        static int lastButtonStateB = 0;
+        if (PinStateChanged(enb_now, &lastButtonStateB, &buttonRisingEdgeB))
+        {
+            encoder_count[mor_right] += speed_sign[mor_right];
+        }
+    }
+    if (millis() - time_ >= timeSample)
+    {
+        double dxy = (encoder_count[mor_right] + encoder_count[mor_left]) * cm_per_count;
+        float dt = (float)timeSample / 1000.0;
+        speed_linear = ((dxy) / 2.0) / dt;
+        speed_angular = (((encoder_count[mor_right] - encoder_count[mor_left]) * cm_per_count) / robot_with) / dt;
+        encoder_count[mor_right] = 0;
+        encoder_count[mor_left] = 0;
+        if(connected)
+        {
+            uint8_t speed_data[8]; 
+            memcpy(speed_data, &speed_linear, 4);
+            memcpy(speed_data + 4, &speed_angular, 4);
+            webSocket.sendBIN(speed_data, 8);
+        }
+        time_ = millis();
+    }
+}
+void onOffBuzz()
+{
+    static unsigned long time_ = millis();
+    static bool onFire = 0;
+    if (fire_now == 1 && onFire == 0)
+    {
+        digitalWrite(BUZZ, 1);
+        onFire = 1;
+        time_ = millis();
+    }
+    if (onFire)
+    {
+        if (millis() - time_ > 2000)
+        {
+            onFire = 0;
+            fire_now = 0;
+            digitalWrite(BUZZ, 0);
+        }
+    }
+}
+void onOffBOM(bool on)
+{
+    if (on)
+        ledcWrite(2, 110);
+    else
+        ledcWrite(2, 0);
+}
+void setup()
+{
+    if (use_serial)
+        Serial.begin(9600);
+    initGPIO();
+    camera_config_t config;
+    config.ledc_channel = LEDC_CHANNEL_0;
+    config.ledc_timer = LEDC_TIMER_0;
+    config.pin_d0 = Y2_GPIO_NUM;
+    config.pin_d1 = Y3_GPIO_NUM;
+    config.pin_d2 = Y4_GPIO_NUM;
+    config.pin_d3 = Y5_GPIO_NUM;
+    config.pin_d4 = Y6_GPIO_NUM;
+    config.pin_d5 = Y7_GPIO_NUM;
+    config.pin_d6 = Y8_GPIO_NUM;
+    config.pin_d7 = Y9_GPIO_NUM;
+    config.pin_xclk = XCLK_GPIO_NUM;
+    config.pin_pclk = PCLK_GPIO_NUM;
+    config.pin_vsync = VSYNC_GPIO_NUM;
+    config.pin_href = HREF_GPIO_NUM;
+    config.pin_sscb_sda = SIOD_GPIO_NUM;
+    config.pin_sscb_scl = SIOC_GPIO_NUM;
+    config.pin_pwdn = PWDN_GPIO_NUM;
+    config.pin_reset = RESET_GPIO_NUM;
+    config.xclk_freq_hz = 20000000;
+    config.pixel_format = PIXFORMAT_JPEG;
+    // init with high specs to pre-allocate larger buffers
+    if (psramFound())
+    {
+        config.frame_size = FRAMESIZE_UXGA;
+        config.jpeg_quality = 10;
+        config.fb_count = 2;
+    }
+    else
+    {
+        config.frame_size = FRAMESIZE_SVGA;
+        config.jpeg_quality = 12;
+        config.fb_count = 1;
+    }
 
-  // try to connect with Wifi network about 8 seconds
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    // Serial.print(".");
-  }
+    // camera init
+    esp_err_t err = esp_camera_init(&config);
+    if (err != ESP_OK)
+    {
+        // Serial.printf("Camera init failed with error 0x%x", err);
+        return;
+    }
 
+    sensor_t *s = esp_camera_sensor_get();
+    s->set_framesize(s, FRAMESIZE_SVGA);
 
+    // sv.write(180);
+    // delay(500);
+    sv.write(angle_servo);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    // Serial.println("");
 
-  // Wait some time to connect to wifi
+    // try to connect with Wifi network about 8 seconds
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        delay(500);
+        // Serial.print(".");
+    }
 
-  // Serial.println(WiFi.localIP());             // You can get IP address assigned to ESP
-  webSocket.begin("172.20.10.2", 6789, "/");  // IP of your server
-  webSocket.onEvent(webSocketEvent);
+    // Wait some time to connect to wifi
+
+    // Serial.println(WiFi.localIP());             // You can get IP address assigned to ESP
+    webSocket.begin("172.20.10.2", 6789, "/"); // IP of your server
+    webSocket.onEvent(webSocketEvent);
 }
 
-
-
-void webSocketEvent(WStype_t type, uint8_t* payload, size_t length) {
-  if (type == WStype_DISCONNECTED) {
-    connected = 0;
-    // Serial.println("Disconnected!");
-  } else if (type == WStype_CONNECTED) {
-    // Serial.println("Connected to WebSocket server!");
-    connected = 1;
-    // webSocket.sendBIN(data, sizeof(data));  // Send binary data
-  } else if (type == WStype_BIN) {
-    // Serial.print("Received binary data of length: ");
-    // Serial.println(length);
-    for (size_t i = 0; i < length; i++) {
-      // Serial.printf("0x%02x ", payload[i]);
+void webSocketEvent(WStype_t type, uint8_t *payload, size_t length)
+{
+    if (type == WStype_DISCONNECTED)
+    {
+        connected = 0;
+        // Serial.println("Disconnected!");
     }
-    // Serial.println();
-  } else if (type == WStype_TEXT) {
-    // Serial.printf("[WSc] get text: %s\n", payload);
-    String command = String((char*)payload);
-    int p_index = command.indexOf("p");
-    if (p_index != -1) {
-      int state_on = command.substring(0, p_index).toInt();
-      if (state_on == 0) {
-        static int onOf = 1;
-        onOffBOM(onOf);
-        onOf = 1 - onOf;
-      } else if (state_on == 1) {
-        fire_now = 1;
-      }
+    else if (type == WStype_CONNECTED)
+    {
+        // Serial.println("Connected to WebSocket server!");
+        connected = 1;
+        // webSocket.sendBIN(data, sizeof(data));  // Send binary data
     }
-    int servo_index = command.indexOf("s");
-    if (servo_index != -1) {
-      int sv_dir = command.substring(0, servo_index).toInt();
-      if (sv_dir == 1) angle_servo += 5;
-      else angle_servo -= 5;
-      angle_servo = constrain(angle_servo, 0, 180);
-      sv.write(angle_servo);
-      // Serial.println(angle_servo);
+    else if (type == WStype_BIN)
+    {
+        // Serial.print("Received binary data of length: ");
+        // Serial.println(length);
+        for (size_t i = 0; i < length; i++)
+        {
+            // Serial.printf("0x%02x ", payload[i]);
+        }
+        // Serial.println();
     }
-    int ind_move = command.indexOf("k");
-    if (ind_move != -1) {
-      int speed_left = command.substring(0, ind_move).toInt();
-      int speed_right=command.substring(ind_move+1).toInt();
-      // moveRobot(index);
-      control_motor(mor_right, speed_right);
-      control_motor(mor_left, speed_left);
-      // Serial.println(index);
+    else if (type == WStype_TEXT)
+    {
+        // Serial.printf("[WSc] get text: %s\n", payload);
+        String command = String((char *)payload);
+        int p_index = command.indexOf("p");
+        if (p_index != -1)
+        {
+            int state_on = command.substring(0, p_index).toInt();
+            if (state_on == 0)
+            {
+                static int onOf = 1;
+                onOffBOM(onOf);
+                onOf = 1 - onOf;
+            }
+            else if (state_on == 1)
+            {
+                fire_now = 1;
+            }
+        }
+        int servo_index = command.indexOf("s");
+        if (servo_index != -1)
+        {
+            int sv_dir = command.substring(0, servo_index).toInt();
+            if (sv_dir == 1)
+                angle_servo += 5;
+            else
+                angle_servo -= 5;
+            angle_servo = constrain(angle_servo, 0, 180);
+            sv.write(angle_servo);
+            // Serial.println(angle_servo);
+        }
+        int ind_move = command.indexOf("k");
+        if (ind_move != -1)
+        {
+            int speed_left = command.substring(0, ind_move).toInt();
+            int speed_right = command.substring(ind_move + 1).toInt();
+            // moveRobot(index);
+            if (fire_now && fireSensorSignal)
+            {
+                speed_left=constrain(speed_left,-75,75);
+                speed_right=constrain(speed_right,-75,75)
+            }
+            control_motor(mor_right, speed_right);
+            control_motor(mor_left, speed_left);
+            // Serial.println(index);
+        }
     }
-  }
 }
-void loop() {
+void loop()
+{
+    fireSensorSignal=digitalRead(fire_sensor);
+    webSocket.loop();
 
-
-  webSocket.loop();
-
-  if (millis() - time_d > 100) { // 100ms =0.1s
-    // unsigned long time_=millis();
-    if (connected) {
-      onOffBuzz();
-      fb = esp_camera_fb_get();
-      // client.sendBinary((const char*)fb->buf, fb->len);
-      webSocket.sendBIN(fb->buf, fb->len);
-      esp_camera_fb_return(fb);
-      fb = NULL;
+    if (millis() - time_d > 100)
+    { // 100ms =0.1s
+        // unsigned long time_=millis();
+        if (connected)
+        {
+            //   onOffBuzz();
+            fb = esp_camera_fb_get();
+            // client.sendBinary((const char*)fb->buf, fb->len);
+            webSocket.sendBIN(fb->buf, fb->len);
+            esp_camera_fb_return(fb);
+            fb = NULL;
+        }
+        time_d = millis();
+        // Serial.println(millis()-time_); // 37-78
     }
-    time_d = millis();
-    // Serial.println(millis()-time_); // 37-78
-  }
+    getEncoder();
 }

@@ -6,13 +6,16 @@ import cv2
 from ultralytics import YOLO
 import numpy as np
 import logging
+import struct
 logging.getLogger('ultralytics').setLevel(logging.ERROR)
 # Flask app initialization
 app = Flask(__name__)
-model = YOLO("D:/file_D/do_an/pythonProject1/esp32_firer-main/yolov10-firedetection/fire.pt")
+model = YOLO("../yolov10-firedetection/fire.pt")
 connected_clients = set()
 fire_detected = False
 get_msg= False
+speed_linear=0
+speed_angular=0
 camera_byte=b''
 def generateSpeed(speed):
     new_speed=0
@@ -39,6 +42,7 @@ def generate_frames():
         #     break
         if get_msg:
             get_msg=False
+            
             try:
                 camera_data+=camera_byte
             # Process the frame (e.g., fire detection)
@@ -119,9 +123,15 @@ def fire_status():
         cmd="1p"
         asyncio.run(broadcast_command(cmd))
     return jsonify({'fire_detected': fire_detected})
+@app.route('/speed_status', methods=['GET'])
+def speed_status():
+    global speed_linear
+    global speed_angular
+    return jsonify({'speed_linear': speed_linear, 'speed_angular': speed_angular})
 async def broadcast_command(command):
     if connected_clients:
         await asyncio.wait([client.send(command) for client in connected_clients])
+
 # WebSocket server for handling binary data
 async def websocket_server(websocket):
     print("WebSocket client connected!")
@@ -129,12 +139,22 @@ async def websocket_server(websocket):
     connected_clients.add(websocket)  # Thêm client vào danh sách
     global camera_byte
     global get_msg
+    global speed_linear
+    global speed_angular
+    
     try:
         async for message in websocket:
             if isinstance(message, bytes):
                 print(f"Received binary data of length {len(message)}")
-                camera_byte=message
-                get_msg=True
+                if len(message) == 8:
+                    print("GET SPEED DATA")
+                    speed_linear = struct.unpack('f', message[:4])[0]
+                    speed_angular = struct.unpack('f', message[4:])[0]
+                    speed_angular=speed_angular*57.29578
+                    print(f"Speed Linear: {speed_linear}, Speed Angular: {speed_angular}")
+                else:
+                    camera_byte=message
+                    get_msg=True
                 # print(message)
                 # Save binary data to a file
             elif isinstance(message, str):

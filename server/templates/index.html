@@ -79,6 +79,10 @@
     <h1>Live Camera Feed</h1>
 
     <!-- Centered video container -->
+    <div id="speed-display" style="margin-bottom: 20px;">
+        <p>Speed Linear: <span id="speed-linear">0.0</span> cm/s</p>
+        <p>Speed Angular: <span id="speed-angular">0.0</span> degree/s</p>
+    </div>
     <div id="video-container">
         <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed" width="640">
     </div>
@@ -224,6 +228,21 @@
                 console.error('Error fetching fire status:', error);
             });
         }
+        function checkSpeedStatus() {
+        fetch('/speed_status')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('speed-linear').textContent = data.speed_linear.toFixed(2);
+                document.getElementById('speed-angular').textContent = data.speed_angular.toFixed(2);
+            })
+            .catch(error => {
+                console.error('Error fetching speed status:', error);
+                    });
+        }
+
+// Gọi hàm checkSpeedStatus mỗi giây
+        setInterval(checkSpeedStatus, 500); // 1000 ms = 1 giây
+
 
     // Gọi hàm checkFireStatus mỗi giây
         setInterval(checkFireStatus, 1000); // 1000 ms = 1 giây
