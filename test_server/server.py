@@ -70,7 +70,13 @@ def index():
 def video_feed():
     """Stream video đến trang web"""
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
+@app.route('/control2', methods=['POST'])
+def control2():
+    """Nhận lệnh điều khiển từ các nút"""
+    direction = request.json.get('direction')
+    print(f"Received command: {direction}")
+    # Thực hiện hành động cho lệnh nhận được ở đây
+    return "Command received", 200
 @app.route('/control', methods=['POST'])
 def control():
     """Nhận lệnh điều khiển từ các nút"""

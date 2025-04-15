@@ -27,7 +27,27 @@
             justify-content: center;
 
         }
+        #control-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 10px; /* Khoảng cách giữa các nút */
+            margin-top: 20px;
+        }
 
+        #control-buttons button {
+            padding: 10px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        #control-buttons button:hover {
+            background-color: #0056b3;
+        }
         /* Warning message styling */
         #warning {
             display: none; /* Ẩn thông báo theo mặc định */
@@ -64,7 +84,11 @@
     <div id="video-container">
         <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed" width="640">
     </div>
-
+    <div id="control-buttons">
+        <button onclick="sendManualCommand('BOM')">BOM</button>
+        <button onclick="sendManualCommand('s1')">SERVO LEFT</button>
+        <button onclick="sendManualCommand('s2')">SERVO RIGHT</button>
+    </div>
     <!-- Warning message -->
     <div id="warning">Cảnh báo: Có lửa được phát hiện!</div>
 
@@ -96,6 +120,24 @@
 
                 lastDirection = direction; // Cập nhật hướng đã gửi
             }
+        }
+        function sendManualCommand(command) {
+            fetch('/control2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction: command })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    document.getElementById('warning').style.display = 'block';
+                } else {
+                    document.getElementById('warning').style.display = 'none';
+                }
+            })
+            .catch(error => {
+                console.error('Error sending manual command:', error);
+                alert("Error sending command!");
+            });
         }
 
         // Hàm để hiển thị cảnh báo khi phát hiện có lửa
