@@ -145,12 +145,11 @@ async def websocket_server(websocket):
     try:
         async for message in websocket:
             if isinstance(message, bytes):
-                print(f"Received binary data of length {len(message)}")
-                if len(message) == 8:
-                    print("GET SPEED DATA")
-                    speed_linear = struct.unpack('f', message[:4])[0]
-                    speed_angular = struct.unpack('f', message[4:])[0]
-                    speed_angular=speed_angular*57.29578
+                # print(f"Received binary data of length {len(message)}")
+                if len(message) == 4:
+                    lin_int, ang_int = struct.unpack('<hh', message)
+                    speed_linear = lin_int / 100.0
+                    speed_angular = ang_int / 10.0
                     print(f"Speed Linear: {speed_linear}, Speed Angular: {speed_angular}")
                 else:
                     camera_byte=message
@@ -163,12 +162,12 @@ async def websocket_server(websocket):
         print(f"WebSocket client disconnected: {e}")
 
 async def websocket_main():
-    start_server = websockets.serve(websocket_server, "172.20.10.2", 6789)
+    start_server = websockets.serve(websocket_server, "0.0.0.0", 6789)
     await start_server  # Khởi chạy server
     await asyncio.Future()  # Duy trì vòng lặp mãi mãi
 
 def run_flask():
-    app.run(host="172.20.10.2", port=5000, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
 
 def run_websocket():
     asyncio.run(websocket_main())  # Sử dụng asyncio.run()
