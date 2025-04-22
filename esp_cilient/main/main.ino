@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include "esp_camera.h"
 #include <WebSocketsClient.h>
-#include <ESP32Servo.h>
+#include <ESP32_Servo.h>
 WebSocketsClient webSocket;
 #define use_serial 0
 // WiFi credentials
@@ -113,7 +113,7 @@ void control_motor(int motor, int speed) {
 
 void initGPIO() {
   if (!use_serial) {
-    sv.attach(servo_pin, 500, 2400);
+    sv.attach(servo_pin);
     sv.write(angle_servo);
     // pinMode(enc[mor_right], INPUT_PULLUP);
     pinMode(fire_sensor, INPUT);
@@ -145,7 +145,7 @@ void getEncoder() {
 
     // 0 == falling, 1 == Rising
     encoder_count[mor_left] += speed_sign[mor_left];
-    encoder_count[mor_right]+=speed_sign[mor_right];
+    encoder_count[mor_right]-=speed_sign[mor_right];
   }
   if (millis() - time_ >= timeSample) {
 
