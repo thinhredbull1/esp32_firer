@@ -3,7 +3,7 @@
 #include <WebSocketsClient.h>
 #include <ESP32Servo.h>
 WebSocketsClient webSocket;
-#define use_serial 1
+#define use_serial 0
 // WiFi credentials
 const char *ssid = "Ngoi nha vui ve";
 const char *password = "06011997";
@@ -144,14 +144,15 @@ void getEncoder() {
 
     // 0 == falling, 1 == Rising
     encoder_count[mor_left] += speed_sign[mor_left];
+    encoder_count[mor_right]+=speed_sign[mor_right];
   }
   if (millis() - time_ >= timeSample) {
 
     // Serial.println(fireSensorSignal);
-    double dxy = encoder_count[mor_left] * cm_per_count;
+    double dxy = (encoder_count[mor_left]+encoder_count[mor_right]) * cm_per_count;
     float dt = (float)timeSample / 1000.0;
     speed_linear = ((dxy) / 2.0) / dt;
-    speed_angular = (((encoder_count[mor_left]) * cm_per_count) / robot_with) / dt;
+    speed_angular = (((encoder_count[mor_left]-encoder_count[mor_right]) * cm_per_count) / robot_with) / dt;
     int16_t linear_scaled = round(speed_linear * 100);
     int16_t angular_scaled = round(speed_angular * 570.2914);
 
