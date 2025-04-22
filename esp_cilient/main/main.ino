@@ -10,6 +10,7 @@ const char *password = "06011997";
 #define MAX_LENGTH 50
 #define RAD_TO_DEG 57.2957786
 int timeSample = 500;
+volatile int speed_cmd[2]={0,0};
 unsigned long time_d = 0;
 bool start_camera = 0;
 #define PWDN_GPIO_NUM 32
@@ -155,7 +156,7 @@ void getEncoder() {
     int16_t linear_scaled = round(speed_linear * 100);
     int16_t angular_scaled = round(speed_angular * 570.2914);
 
-
+    
     // Serial.print(speed_linear);
     // Serial.print(",");
     // Serial.println(encoder_count[mor_left]);
@@ -297,6 +298,8 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
         speed_left = constrain(speed_left, -75, 75);
         speed_right = constrain(speed_right, -75, 75);
       }
+      speed_cmd[mor_left]=speed_left;
+      speed_cmd[mor_right]=speed_linear;
 
       control_motor(mor_right, speed_right);
       control_motor(mor_left, speed_left);

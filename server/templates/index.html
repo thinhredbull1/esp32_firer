@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Live Camera Feed and Controls</title>
@@ -12,28 +13,36 @@
             flex-direction: column;
             align-items: center;
             font-family: Arial, sans-serif;
-            position: relative; /* Thêm để dễ dàng định vị các phần tử */
-            height: 100vh; /* Đặt chiều cao toàn bộ trang */
-            overflow: hidden; /* Ẩn các thanh cuộn */
+            position: relative;
+            /* Thêm để dễ dàng định vị các phần tử */
+            height: 100vh;
+            /* Đặt chiều cao toàn bộ trang */
+            overflow: hidden;
+            /* Ẩn các thanh cuộn */
         }
-        
+
         h1 {
             font-size: 2em;
             margin-bottom: 20px;
         }
-        
+
         #video-container {
             display: flex;
             justify-content: center;
 
         }
+
         #control-buttons {
             display: flex;
-            flex-direction: column; /* Sắp xếp các nút theo chiều dọc */
-            gap: 15px; /* Khoảng cách giữa các nút */
+            flex-direction: column;
+            /* Sắp xếp các nút theo chiều dọc */
+            gap: 15px;
+            /* Khoảng cách giữa các nút */
             position: absolute;
-            bottom: 20px; /* Cách mép dưới 20px */
-            right: 20px; /* Cách mép phải 20px */
+            bottom: 20px;
+            /* Cách mép dưới 20px */
+            right: 20px;
+            /* Cách mép phải 20px */
         }
 
         #control-buttons button {
@@ -51,30 +60,42 @@
         #control-buttons button:hover {
             background-color: #0056b3;
         }
+
         /* Warning message styling */
         #warning {
-            display: none; /* Ẩn thông báo theo mặc định */
+            display: none;
+            /* Ẩn thông báo theo mặc định */
             color: red;
-            font-size: 32px; /* Tăng kích thước chữ */
+            font-size: 32px;
+            /* Tăng kích thước chữ */
             font-weight: bold;
             position: absolute;
-            top: 20px; /* Vị trí từ trên xuống */
-            right: 20px; /* Di chuyển sang bên phải */
+            top: 20px;
+            /* Vị trí từ trên xuống */
+            right: 20px;
+            /* Di chuyển sang bên phải */
         }
 
         /* Joystick container styling */
         #joystick-container {
-            width: 200px;      /* Độ rộng joystick */
-            height: 200px;     /* Chiều cao joystick */
-            margin-bottom: 20px; /* Khoảng cách dưới */
-            position: absolute; /* Đặt vị trí tuyệt đối */
-            bottom: 20px; /* Cách dưới 20px */
-            left: 20px; /* Căn giữa */
+            width: 300px;
+            /* Độ rộng joystick */
+            height: 300px;
+            /* Chiều cao joystick */
+            margin-bottom: 20px;
+            /* Khoảng cách dưới */
+            position: absolute;
+            /* Đặt vị trí tuyệt đối */
+            bottom: 20px;
+            /* Cách dưới 20px */
+            left: 20px;
+            /* Căn giữa */
         }
 
         /* NippleJS joystick styles */
     </style>
 </head>
+
 <body>
     <h1>Live Camera Feed</h1>
 
@@ -86,7 +107,7 @@
     <div id="video-container">
         <img src="{{ url_for('video_feed') }}" alt="Live Camera Feed" width="640">
     </div>
- 
+
     <!-- Warning message -->
     <div id="warning">Cảnh báo: Có lửa được phát hiện!</div>
 
@@ -102,26 +123,26 @@
     <script>
         let lastDirection = null; // Biến để lưu hướng đã gửi
         const threshold = 15; // Ngưỡng di chuyển để phát hiện
-            // json {control:}
+        // json {control:}
         // Hàm để gửi lệnh joystick đến server
         function sendCommand(direction) {
-       
-                fetch('/control', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({direction: direction})
-                }).then(response => {
-                    if (!response.ok) {
-                        document.getElementById('warning').style.display = 'block';
-                    } else {
-                        document.getElementById('warning').style.display = 'none';
-                    }
-                }).catch(() => {
-                    document.getElementById('warning').style.display = 'block';
-                });
 
-                lastDirection = direction; // Cập nhật hướng đã gửi
-            
+            fetch('/control', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ direction: direction })
+            }).then(response => {
+                if (!response.ok) {
+                    document.getElementById('warning').style.display = 'block';
+                } else {
+                    document.getElementById('warning').style.display = 'none';
+                }
+            }).catch(() => {
+                document.getElementById('warning').style.display = 'block';
+            });
+
+            lastDirection = direction; // Cập nhật hướng đã gửi
+
         }
         function sendManualCommand(command) {
             fetch('/control2', {
@@ -129,17 +150,17 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ direction: command })
             })
-            .then(response => {
-                if (!response.ok) {
-                    document.getElementById('warning').style.display = 'block';
-                } else {
-                    document.getElementById('warning').style.display = 'none';
-                }
-            })
-            .catch(error => {
-                console.error('Error sending manual command:', error);
-                alert("Error sending command!");
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        document.getElementById('warning').style.display = 'block';
+                    } else {
+                        document.getElementById('warning').style.display = 'none';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error sending manual command:', error);
+                    alert("Error sending command!");
+                });
         }
 
         // Hàm để hiển thị cảnh báo khi phát hiện có lửa
@@ -157,40 +178,40 @@
             mode: 'static',
             position: { left: '50%', top: '50%' },
             color: 'blue',
-            size: 200
-            
+            size: 300
+
         });
         joystickManager.on('added', (evt, nipple) => {
-    // Chọn phần tử núm (nipple)
+            // Chọn phần tử núm (nipple)
             const nippleElement = nipple.ui.front;
 
             // Chỉnh kích thước núm
-            nippleElement.style.width = '50px';  // Đặt chiều rộng núm
-            nippleElement.style.height = '50px'; // Đặt chiều cao núm
+            nippleElement.style.width = '100px';  // Đặt chiều rộng núm
+            nippleElement.style.height = '100px'; // Đặt chiều cao núm
 
             // Nếu muốn đổi màu:
             nippleElement.style.backgroundColor = 'red';
         });
-    let prevX = 0;
-    let prevY = 0;
+        let prevX = 0;
+        let prevY = 0;
 
-// Ngưỡng thay đổi
+        // Ngưỡng thay đổi
 
         // Lập bản đồ chuyển động joystick tới các hướng
         joystickManager.on('move', (evt, data) => {
             if (data.angle && typeof data.angle.radian !== 'undefined') {
                 // Tính toán vector x và y
-                const x = data.force * Math.cos(data.angle.radian);
-                const y = data.force * Math.sin(data.angle.radian);
-                
+                const x = data.force * Math.cos(data.angle.radian)*2;
+                const y = data.force * Math.sin(data.angle.radian)*2;
+
                 // Chỉ gửi lệnh nếu x hoặc y thay đổi vượt ngưỡng
                 if (Math.abs(x - prevX) > threshold || Math.abs(y - prevY) > 0.04) {
                     console.log('Significant movement detected. Sending command:', { x, y });
-                    
+
                     // Gửi lệnh
-                    var cmd=String(y+x)+"k"+String(y-x);
+                    var cmd = String(y + x) + "k" + String(y - x);
                     sendCommand(cmd);
-                    
+
                     // Cập nhật giá trị trước đó
                     prevX = x;
                     prevY = y;
@@ -215,39 +236,40 @@
             }
         }
         function checkFireStatus() {
-        fetch('/fire_status')
-            .then(response => response.json())
-            .then(data => {
-                if (data.fire_detected) {
-                    showWarning(); // Hiện cảnh báo nếu phát hiện lửa
-                } else {
-                    hideWarning(); // Ẩn cảnh báo nếu không phát hiện lửa
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching fire status:', error);
-            });
+            fetch('/fire_status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.fire_detected) {
+                        showWarning(); // Hiện cảnh báo nếu phát hiện lửa
+                    } else {
+                        hideWarning(); // Ẩn cảnh báo nếu không phát hiện lửa
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching fire status:', error);
+                });
         }
         function checkSpeedStatus() {
-        fetch('/speed_status')
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('speed-linear').textContent = data.speed_linear.toFixed(2);
-                document.getElementById('speed-angular').textContent = data.speed_angular.toFixed(2);
-            })
-            .catch(error => {
-                console.error('Error fetching speed status:', error);
-                    });
+            fetch('/speed_status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('speed-linear').textContent = data.speed_linear.toFixed(2);
+                    document.getElementById('speed-angular').textContent = data.speed_angular.toFixed(2);
+                })
+                .catch(error => {
+                    console.error('Error fetching speed status:', error);
+                });
         }
 
-// Gọi hàm checkSpeedStatus mỗi giây
+        // Gọi hàm checkSpeedStatus mỗi giây
         setInterval(checkSpeedStatus, 500); // 1000 ms = 1 giây
 
 
-    // Gọi hàm checkFireStatus mỗi giây
+        // Gọi hàm checkFireStatus mỗi giây
         setInterval(checkFireStatus, 1000); // 1000 ms = 1 giây
 
         // Bạn có thể gọi hàm `detectFire(true)` hoặc `detectFire(false)` để kiểm tra việc phát hiện lửa
     </script>
 </body>
+
 </html>

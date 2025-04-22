@@ -16,13 +16,15 @@ fire_detected = False
 get_msg= False
 speed_linear=0
 speed_angular=0
+min_speed=10
 camera_byte=b''
 def generateSpeed(speed):
+    global min_speed
     new_speed=0
     if(speed>20):
-        new_speed=max(speed,80)
+        new_speed=max(speed,min_speed)
     elif(speed<-20):
-        new_speed=min(speed,-80)
+        new_speed=min(speed,-min_speed)
     return new_speed
 def generate_frames():
     """Camera frame generator."""
@@ -95,7 +97,6 @@ def control2():
     """Nhận lệnh điều khiển từ các nút"""
     direction = request.json.get('direction')
     print(f"Received command: {direction}")
-    # Thực hiện hành động cho lệnh nhận được ở đây
     asyncio.run(broadcast_command(direction))
     return "Command received", 200
 
@@ -163,8 +164,8 @@ async def websocket_server(websocket):
 
 async def websocket_main():
     start_server = websockets.serve(websocket_server, "0.0.0.0", 6789)
-    await start_server  # Khởi chạy server
-    await asyncio.Future()  # Duy trì vòng lặp mãi mãi
+    await start_server  
+    await asyncio.Future()  
 
 def run_flask():
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
