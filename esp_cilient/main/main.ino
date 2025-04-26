@@ -10,7 +10,7 @@ const char *password = "06011997";
 #define MAX_LENGTH 50
 #define RAD_TO_DEG 57.2957786
 int timeSample = 500;
-volatile int speed_cmd[2]={0,0};
+volatile int speed_cmd[2] = { 0, 0 };
 unsigned long time_d = 0;
 bool start_camera = 0;
 #define PWDN_GPIO_NUM 32
@@ -35,7 +35,7 @@ float speed_increase;
 bool run_ = 0;
 unsigned long time_ = 0;
 unsigned long time_stop;
-
+const int initial_speed = 160;
 #define tien 1
 #define lui 2
 
@@ -87,19 +87,40 @@ bool PinStateChanged(int pin, int *lastButtonState, int *buttonRisingEdge) {
   return false;
 }
 void control_motor(int motor, int speed) {
+  static int last_speed[2] = { 0, 0 };  // Lưu vận tốc trước đó cho mỗi motor
+  static bool start_acc[2] = { false, false };
+  static int current_speed[2] = { 0, 0 };
   motor = 1 - motor;
   speed = -speed;
   if (motor == mor_right) speed = -speed;
-  bool direct = speed > 0 ? 0 : 1;
-  // digitalWrite(dir[motor],direct);
-  // if(motor)
-
   if (speed == 0) {
     analogWrite(pwm[motor], 0);
     digitalWrite(dir[motor], 0);
-    // speed_sign[motor]=0;
+    speed_sign[motor] = 0;
+    current_speed[motor] = 0;
+    start_acc[motor] = false;
+    last_speed[motor]=0;
     return;
   }
+  if (last_speed[motor] == 0) {
+    current_speed[motor] = (speed >= 0) ? initial_speed : -initial_speed;  // Giữ dấu của speed
+    start_acc[motor] = true;
+  }
+
+  if (start_acc[motor]) {
+
+    current_speed[motor] = current_speed[motor] * 0.6 + speed * 0.4;
+    if (abs(current_speed[motor]) > speed) {
+      start_acc[motor] = false;
+      current_speed[motor] = speed;
+    }
+    speed = current_speed[motor];
+  } else {
+    current_speed[motor] = speed;
+  }
+
+  // Logic điều khiển motor bình thường
+  bool direct = speed > 0 ? 0 : 1;
   if (direct) {
     speed_sign[motor] = -1;
     analogWrite(pwm[motor], 255 - abs(speed));
@@ -109,6 +130,7 @@ void control_motor(int motor, int speed) {
     analogWrite(pwm[motor], abs(speed));
     digitalWrite(dir[motor], 0);
   }
+  last_speed[motor] = speed;
 }
 
 void initGPIO() {
@@ -145,19 +167,21 @@ void getEncoder() {
 
     // 0 == falling, 1 == Rising
     encoder_count[mor_left] += speed_sign[mor_left];
-    encoder_count[mor_right]-=speed_sign[mor_right];
+    encoder_count[mor_right] = speed_sign[mor_right];
   }
   if (millis() - time_ >= timeSample) {
 
     // Serial.println(fireSensorSignal);
-    double dxy = (encoder_count[mor_left]+encoder_count[mor_right]) * cm_per_count;
+    double dxy = (encoder_count[mor_left]) * cm_per_count;
     float dt = (float)timeSample / 1000.0;
     speed_linear = ((dxy) / 2.0) / dt;
-    speed_angular = (((encoder_count[mor_left]-encoder_count[mor_right]) * cm_per_count) / robot_with) / dt;
+    if (speed_sign[mor_left] != speed_sign[mor_right]) {
+      speed_angular = (((encoder_count[mor_left]) * cm_per_count) / robot_with) / dt;
+    }
     int16_t linear_scaled = round(speed_linear * 100);
     int16_t angular_scaled = round(speed_angular * 570.2914);
 
-    
+
     // Serial.print(speed_linear);
     // Serial.print(",");
     // Serial.println(encoder_count[mor_left]);
@@ -171,11 +195,12 @@ void getEncoder() {
       // memcpy(speed_data, &speed_linear, 4);
       // memcpy(speed_data + 4, &speed_angular, 4);
       // webSocket.sendBIN(speed_data, 8);
-      uint8_t speed_data[4];
+      uint8_t speed_data[5];
       memcpy(speed_data, &linear_scaled, 2);
       memcpy(speed_data + 2, &angular_scaled, 2);
+      memcpy(speed_data + 4, &fireSensorSignal, 1);
 
-      webSocket.sendBIN(speed_data, 4);
+      webSocket.sendBIN(speed_data, 5);
     }
     time_ = millis();
   }
@@ -295,15 +320,14 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
       int speed_left = command.substring(0, ind_move).toInt();
       int speed_right = command.substring(ind_move + 1).toInt();
       // moveRobot(index);
-      if (fire_now && fireSensorSignal) {
+      if (fire_now && !fireSensorSignal) {
         speed_left = constrain(speed_left, -75, 75);
         speed_right = constrain(speed_right, -75, 75);
       }
-      speed_cmd[mor_left]=speed_left;
-      speed_cmd[mor_right]=speed_linear;
+      speed_cmd[mor_left] = speed_left;
+      speed_cmd[mor_right] = speed_right;
 
-      control_motor(mor_right, speed_right);
-      control_motor(mor_left, speed_left);
+
       // Serial.println(index);
     }
   }
@@ -341,6 +365,8 @@ void loop() {
       esp_camera_fb_return(fb);
       fb = NULL;
     }
+    control_motor(mor_right, speed_cmd[mor_right]);
+    control_motor(mor_left, speed_cmd[mor_left]);
     time_d = millis();
     // Serial.println(millis()-time_); // 37-78
   }

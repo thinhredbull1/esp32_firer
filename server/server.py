@@ -18,6 +18,7 @@ speed_linear=0
 speed_angular=0
 min_speed=10
 camera_byte=b''
+fire_sensor=False
 def generateSpeed(speed):
     global min_speed
     new_speed=0
@@ -61,7 +62,7 @@ def generate_frames():
                     jpg = camera_data[jpghead:jpgend + 2]
                     camera_data = camera_data[jpgend + 2:]
                     img = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_UNCHANGED)
-                    img = cv2.rotate(img, cv2.ROTATE_180)
+                    # img = cv2.rotate(img, cv2.ROTATE_180)
                     results = model(img, conf=0.75)
                     global fire_detected
                     fire_detected = False
@@ -106,7 +107,7 @@ def control():
     # print(f"Received command: {direction}")
     speed=direction.split("k")
     speed_left=int(float(speed[0])*100)
-    speed_right=int(float(speed[1])*100)
+    speed_right=int(float(speed[1])*120)
     speed_left=max(min(speed_left,200),-200)
     speed_right=max(min(speed_right,200),-200)
     speed_left=generateSpeed(speed_left)
@@ -120,10 +121,11 @@ def control():
 @app.route('/fire_status', methods=['GET'])
 def fire_status():
     global fire_detected
-    if(fire_detected):
-        cmd="1p"
+    global fire_sensor
+    if fire_detected:
+        cmd = "1p"
         asyncio.run(broadcast_command(cmd))
-    return jsonify({'fire_detected': fire_detected})
+    return jsonify({'fire_detected': fire_detected, 'fire_sensor': fire_sensor})
 @app.route('/speed_status', methods=['GET'])
 def speed_status():
     global speed_linear
@@ -142,16 +144,17 @@ async def websocket_server(websocket):
     global get_msg
     global speed_linear
     global speed_angular
-    
+    global fire_sensor  # Biến toàn cục mới để lưu trạng thái cảm biến lửa
     try:
         async for message in websocket:
             if isinstance(message, bytes):
                 # print(f"Received binary data of length {len(message)}")
-                if len(message) == 4:
-                    lin_int, ang_int = struct.unpack('<hh', message)
+                if len(message) == 5:
+                    lin_int, ang_int,fire = struct.unpack('<hh?', message)
                     speed_linear = lin_int / 100.0
                     speed_angular = ang_int / 10.0
-                    print(f"Speed Linear: {speed_linear}, Speed Angular: {speed_angular}")
+                    fire_sensor = bool(fire)  # Lưu trạng thái cảm biến lửa
+                    print(f"Speed Linear: {speed_linear}, Speed Angular: {speed_angular}, Fire Sensor: {fire_sensor}")
                 else:
                     camera_byte=message
                     get_msg=True

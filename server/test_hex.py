@@ -18,3 +18,10 @@ print("Angular:", ang_little)
 print("Big-endian:")
 print("Linear:", lin_big)
 print("Angular:", ang_big)
+target=60
+speed_init=200
+for i in range(0,10):
+   
+    speed_new=speed_init*0.7+target*0.3
+    speed_init=speed_new
+    print(speed_new)
